@@ -10,11 +10,13 @@ import com.autozcare.main.model.User;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 	
-	public Optional<User> findByUsernameOrEmail(String username, String emailId);
+	public Optional<User> findByUsernameOrEmailOrMobileNumber(String username, String emailId, String mobileNumber);
 	
 	public Boolean existsByUsername(String username);
 	
 	public Boolean existsByEmail(String email);
+	
+	public Boolean existsByMobileNumber(String mobileNumber);
 	
 	
 

@@ -1,5 +1,6 @@
 package com.autozcare.main.model;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -14,23 +15,30 @@ import javax.persistence.ManyToMany;
 import javax.persistence.Table;
 import javax.persistence.UniqueConstraint;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Data
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 @Entity
-@Table(name = "uses", uniqueConstraints = {
+@Table(name = "user", uniqueConstraints = {
         @UniqueConstraint(columnNames = {
             "username"
         }),
         @UniqueConstraint(columnNames = {
             "email"
-        })
+        }),
+        @UniqueConstraint(columnNames = {
+                "mobileNumber"
+            })
 })
-public class User extends DateModel {
+public class User extends Auditable {
 
 	private static final long serialVersionUID = 8894651381735709494L;
 	
@@ -46,17 +54,13 @@ public class User extends DateModel {
 
     private String password;
     
+    private String mobileNumber;
+    
+    private LocalDate dob;
+    
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
-    
-    public User(String name, String username, String email, String password) {
-    	this.name= name;
-    	this.username = username;
-    	this.email = email;
-    	this.password = password;
-    }
-
 }
