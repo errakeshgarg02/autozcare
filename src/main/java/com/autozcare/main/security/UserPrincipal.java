@@ -1,81 +1,42 @@
 package com.autozcare.main.security;
-import com.autozcare.main.model.User;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import java.util.Collection;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.time.LocalDate;
-import java.util.Collection;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
+import com.autozcare.main.model.User;
 
-@Builder
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 @NoArgsConstructor
-@AllArgsConstructor
 @Data
 public class UserPrincipal implements UserDetails {
 
 	private static final long serialVersionUID = 1457844782917600111L;
 
-	private Long id;
-
-    private String name;
-
-    private String username;
-
-    @JsonIgnore
-    private String email;
-
-    @JsonIgnore
-    private String password;
+    private User user;
     
-    private String mobileNumber;
-    
-    private LocalDate dob;
-
     private Collection<? extends GrantedAuthority> authorities;
 
-	/*
-	 * public UserPrincipal(Long id, String name, String username, String email,
-	 * String password, Collection<? extends GrantedAuthority> authorities) {
-	 * this.id = id; this.name = name; this.username = username; this.email = email;
-	 * this.password = password; this.authorities = authorities; }
-	 */
-
-    public static UserPrincipal create(User user) {
-        List<GrantedAuthority> authorities = user.getRoles().stream().map(role ->
-                new SimpleGrantedAuthority(role.getName().name())
-        ).collect(Collectors.toList());
-
-        return UserPrincipal.builder().id(user.getId())
-        .name(user.getName()).username(user.getUsername())
-        .email(user.getEmail()).password(user.getPassword())
-        .mobileNumber(user.getMobileNumber())
-        .dob(user.getDob())
-        .authorities(authorities).build();
-        
-		/*
-		 * return new UserPrincipal( user.getId(), user.getName(), user.getUsername(),
-		 * user.getEmail(), user.getPassword(), authorities );
-		 */
-    }
-
+    
+	public UserPrincipal(User user) {
+		this.user = user;
+		this.authorities = user.getRoles().stream().map(role -> new SimpleGrantedAuthority(role.getName().name()))
+				.collect(Collectors.toList());
+	}
+    
     @Override
     public String getUsername() {
-        return username;
+        return user.getMobileNumber();
     }
 
     @Override
     public String getPassword() {
-        return password;
+        return user.getPassword();
     }
 
     @Override
@@ -85,22 +46,22 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public boolean isAccountNonExpired() {
-        return true;
+        return user.isAccountNonExpired();
     }
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        return user.isAccountNonLocked();
     }
 
     @Override
     public boolean isCredentialsNonExpired() {
-        return true;
+        return user.isCredentialsNonExpired();
     }
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return user.isActive();
     }
 
     @Override
@@ -108,12 +69,11 @@ public class UserPrincipal implements UserDetails {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         UserPrincipal that = (UserPrincipal) o;
-        return Objects.equals(id, that.id);
+        return Objects.equals(this.user.getId(), that.getUser().getId());
     }
 
     @Override
     public int hashCode() {
-
-        return Objects.hash(id);
+        return Objects.hash(this.user.getId());
     }
 }

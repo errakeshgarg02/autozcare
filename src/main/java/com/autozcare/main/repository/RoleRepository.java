@@ -1,4 +1,4 @@
-package com.autozcare.main.dao;
+package com.autozcare.main.repository;
 
 import java.util.Optional;
 

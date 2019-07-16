@@ -1,4 +1,4 @@
-package com.autozcare.main.dao;
+package com.autozcare.main.repository;
 
 import java.util.Optional;
 
@@ -10,11 +10,7 @@ import com.autozcare.main.model.User;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 	
-	public Optional<User> findByUsernameOrEmailOrMobileNumber(String username, String emailId, String mobileNumber);
-	
-	public Boolean existsByUsername(String username);
-	
-	public Boolean existsByEmail(String email);
+	public Optional<User> findByMobileNumber(String mobileNumber);
 	
 	public Boolean existsByMobileNumber(String mobileNumber);
 	

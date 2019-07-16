@@ -1,244 +1,114 @@
 package com.autozcare.main.controller;
 
-import java.net.URI;
-import java.time.LocalDate;
-import java.util.Collections;
-
 import javax.validation.Valid;
 
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import com.autozcare.main.dao.RoleRepository;
-import com.autozcare.main.dao.UserRepository;
 import com.autozcare.main.dto.ApiResponse;
+import com.autozcare.main.dto.CustomerLoginRequest;
+import com.autozcare.main.dto.CustomerLoginResponse;
 import com.autozcare.main.dto.JwtAuthenticationResponse;
 import com.autozcare.main.dto.LoginRequest;
 import com.autozcare.main.dto.SignUpRequest;
+import com.autozcare.main.dto.ValidateOtpRequest;
 import com.autozcare.main.enums.RoleName;
-import com.autozcare.main.exception.AppException;
-import com.autozcare.main.model.Role;
-import com.autozcare.main.model.User;
+import com.autozcare.main.exception.AutozcareException;
+import com.autozcare.main.exception.BadRequestException;
+import com.autozcare.main.helper.AutozcareHelper;
 import com.autozcare.main.security.JwtTokenProvider;
+import com.autozcare.main.service.AuthenticationService;
 
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
+@Slf4j
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @Autowired
-    AuthenticationManager authenticationManager;
+	@Autowired
+	private AutozcareHelper autozcareHelper;
 
-    @Autowired
-    UserRepository userRepository;
+	@Autowired
+	private AuthenticationService authenticationService;
 
-    @Autowired
-    RoleRepository roleRepository;
+	@Autowired
+	private JwtTokenProvider tokenProvider;
 
-    @Autowired
-    PasswordEncoder passwordEncoder;
+	@PostMapping(value = "/signin", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+		log.debug("inside authenticateUser method");
+		return tokenProvider.authenticateUserAndGenerateToken(loginRequest.getUserId(), loginRequest.getPassword()).map(
+				jwtToken -> autozcareHelper.prepareResponse(HttpStatus.OK, new JwtAuthenticationResponse(jwtToken)))
+				.orElseThrow(() -> new AutozcareException(HttpStatus.UNAUTHORIZED, "Error logging in user!"));
+	}
+	
+	
+	@PostMapping(value = "/validateOtp", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<ApiResponse> validateOtp(@Valid @RequestBody ValidateOtpRequest validateOtpRequest) {
+		log.debug("inside validateOtp method");
 
-    @Autowired
-    JwtTokenProvider tokenProvider;
+		return authenticationService.validateOtp(validateOtpRequest)
+				.map(user -> autozcareHelper.prepareResponse(HttpStatus.OK, new ApiResponse(true, "OTP validated")))
+				.orElseThrow(() -> new BadRequestException("OTP in invalid"));
+	}
+	 
 
-    @PostMapping(value = "/signin", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+	@PostMapping(value = "/customer/signin", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<CustomerLoginResponse> registerOrLoginCustomer(
+			@Valid @RequestBody CustomerLoginRequest customerLoginRequest) {
+		log.debug("inside registerOrLoginCustomer method");
+		return authenticationService.registerOrLoginCustomer(customerLoginRequest)
+				.map(user -> autozcareHelper.prepareResponse(HttpStatus.ACCEPTED,
+						CustomerLoginResponse.builder().mobileNumber(user.getMobileNumber())
+								.message("login request accepted").build()))
+				.orElseThrow(() -> new AutozcareException(HttpStatus.INTERNAL_SERVER_ERROR, "Error in login"));
+	}
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        loginRequest.getUserId(),
-                        loginRequest.getPassword()
-                )
-        );
+	@PostMapping(value = "/customer/validateOtp", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<JwtAuthenticationResponse> validateCustomerOtp(
+			@Valid @RequestBody ValidateOtpRequest validateOtpRequest) {
+		log.debug("inside validateCustomerOtp method");
+		return authenticationService.validateOtpAndCreateSession(validateOtpRequest).map(
+				jstToken -> autozcareHelper.prepareResponse(HttpStatus.OK, new JwtAuthenticationResponse(jstToken)))
+				.orElseThrow(() -> new BadRequestException("OTP in invalid"));
+	}
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+	@PostMapping(value = "/admin/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<CustomerLoginResponse> registerAdmin(@Valid @RequestBody SignUpRequest signUpRequest) {
 
-        String jwt = tokenProvider.generateToken(authentication);
-        return ResponseEntity.ok(new JwtAuthenticationResponse(jwt));
-    }
+		return authenticationService.registerUser(signUpRequest, RoleName.ROLE_ADMIN)
+				.map(user -> autozcareHelper.prepareResponse(HttpStatus.ACCEPTED,
+						CustomerLoginResponse.builder().mobileNumber(user.getMobileNumber())
+								.message("login request accepted").build()))
+				.orElseThrow(() -> new AutozcareException(HttpStatus.INTERNAL_SERVER_ERROR,
+						"Error in registering admin user"));
+	}
 
-    @SuppressWarnings("unchecked")
-    @PostMapping(value = "/customer/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> registerCustomer(@Valid @RequestBody SignUpRequest signUpRequest) {
-        if(userRepository.existsByUsername(signUpRequest.getUsername())) {
-            return new ResponseEntity(new ApiResponse(false, "Username is already taken!"),
-                    HttpStatus.BAD_REQUEST);
-        }
+	@PostMapping(value = "/vendor/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<CustomerLoginResponse> registerVendor(@Valid @RequestBody SignUpRequest signUpRequest) {
+		return authenticationService.registerUser(signUpRequest, RoleName.ROLE_VENDOR)
+				.map(user -> autozcareHelper.prepareResponse(HttpStatus.ACCEPTED,
+						CustomerLoginResponse.builder().mobileNumber(user.getMobileNumber())
+								.message("login request accepted").build()))
+				.orElseThrow(() -> new AutozcareException(HttpStatus.INTERNAL_SERVER_ERROR,
+						"Error in registering vendor user"));
+	}
+	
+	@PutMapping(value = "/invalidteOtp", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<ApiResponse> invalidateOtp(@RequestParam String mobileNumber) {
+		return authenticationService.invalidateOtp(mobileNumber)
+		.map(flag -> autozcareHelper.prepareResponse(HttpStatus.OK, new ApiResponse(true, "OTP invalidated")))
+		.orElseThrow(() -> new AutozcareException(HttpStatus.INTERNAL_SERVER_ERROR,
+				"Error in invalidating user OTP for mobileNumber " + mobileNumber));
+	}
 
-        if(userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return new ResponseEntity(new ApiResponse(false, "Email Address already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        if(userRepository.existsByMobileNumber(signUpRequest.getMobileNumber())) {
-            return new ResponseEntity(new ApiResponse(false, "Mobile number already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        User user = new User();
-        BeanUtils.copyProperties(signUpRequest, user);
-        // Creating user's account
-		/*
-		 * User user = new User(signUpRequest.getName(), signUpRequest.getUsername(),
-		 * signUpRequest.getEmail(), signUpRequest.getPassword());
-		 */
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        
-        user.setDob(LocalDate.parse(signUpRequest.getDob()));
-        
-        Role userRole = roleRepository.findByName(RoleName.ROLE_USER)
-                .orElseThrow(() -> new AppException("User Role not set."));
-
-        user.setRoles(Collections.singleton(userRole));
-
-        User result = userRepository.save(user);
-
-        URI location = ServletUriComponentsBuilder
-                .fromCurrentContextPath().path("/api/users/{username}")
-                .buildAndExpand(result.getUsername()).toUri();
-
-        return ResponseEntity.created(location).body(new ApiResponse(true, "User registered successfully"));
-    }
-    
-    @SuppressWarnings("unchecked")
-    @PostMapping(value = "/admin/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> registerAdmin(@Valid @RequestBody SignUpRequest signUpRequest) {
-        if(userRepository.existsByUsername(signUpRequest.getUsername())) {
-            return new ResponseEntity(new ApiResponse(false, "Username is already taken!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-
-        if(userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return new ResponseEntity(new ApiResponse(false, "Email Address already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        if(userRepository.existsByMobileNumber(signUpRequest.getMobileNumber())) {
-            return new ResponseEntity(new ApiResponse(false, "Mobile number already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        User user = new User();
-        BeanUtils.copyProperties(signUpRequest, user);
-        // Creating user's account
-		/*
-		 * User user = new User(signUpRequest.getName(), signUpRequest.getUsername(),
-		 * signUpRequest.getEmail(), signUpRequest.getPassword());
-		 */
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        
-        user.setDob(LocalDate.parse(signUpRequest.getDob()));
-        
-        Role userRole = roleRepository.findByName(RoleName.ROLE_ADMIN)
-                .orElseThrow(() -> new AppException("User Role not set."));
-
-        user.setRoles(Collections.singleton(userRole));
-
-        User result = userRepository.save(user);
-
-        URI location = ServletUriComponentsBuilder
-                .fromCurrentContextPath().path("/api/users/{username}")
-                .buildAndExpand(result.getUsername()).toUri();
-
-        return ResponseEntity.created(location).body(new ApiResponse(true, "User registered successfully"));
-    }
-    
-    @SuppressWarnings("unchecked")
-    @PostMapping(value = "/vendor/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> registerVendor(@Valid @RequestBody SignUpRequest signUpRequest) {
-        if(userRepository.existsByUsername(signUpRequest.getUsername())) {
-            return new ResponseEntity(new ApiResponse(false, "Username is already taken!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-
-        if(userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return new ResponseEntity(new ApiResponse(false, "Email Address already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        if(userRepository.existsByMobileNumber(signUpRequest.getMobileNumber())) {
-            return new ResponseEntity(new ApiResponse(false, "Mobile number already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        User user = new User();
-        BeanUtils.copyProperties(signUpRequest, user);
-        // Creating user's account
-		/*
-		 * User user = new User(signUpRequest.getName(), signUpRequest.getUsername(),
-		 * signUpRequest.getEmail(), signUpRequest.getPassword());
-		 */
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        
-        user.setDob(LocalDate.parse(signUpRequest.getDob()));
-        
-        Role userRole = roleRepository.findByName(RoleName.ROLE_VENDOR)
-                .orElseThrow(() -> new AppException("User Role not set."));
-
-        user.setRoles(Collections.singleton(userRole));
-
-        User result = userRepository.save(user);
-
-        URI location = ServletUriComponentsBuilder
-                .fromCurrentContextPath().path("/api/users/{username}")
-                .buildAndExpand(result.getUsername()).toUri();
-
-        return ResponseEntity.created(location).body(new ApiResponse(true, "User registered successfully"));
-    }
-    
-    @SuppressWarnings("unchecked")
-    @PostMapping(value = "/employee/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> registerEmployee(@Valid @RequestBody SignUpRequest signUpRequest) {
-        if(userRepository.existsByUsername(signUpRequest.getUsername())) {
-            return new ResponseEntity(new ApiResponse(false, "Username is already taken!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-
-        if(userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return new ResponseEntity(new ApiResponse(false, "Email Address already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        if(userRepository.existsByMobileNumber(signUpRequest.getMobileNumber())) {
-            return new ResponseEntity(new ApiResponse(false, "Mobile number already in use!"),
-                    HttpStatus.BAD_REQUEST);
-        }
-        
-        User user = new User();
-        BeanUtils.copyProperties(signUpRequest, user);
-        // Creating user's account
-		/*
-		 * User user = new User(signUpRequest.getName(), signUpRequest.getUsername(),
-		 * signUpRequest.getEmail(), signUpRequest.getPassword());
-		 */
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        
-        user.setDob(LocalDate.parse(signUpRequest.getDob()));
-        
-        Role userRole = roleRepository.findByName(RoleName.ROLE_EMPLOYEE)
-                .orElseThrow(() -> new AppException("User Role not set."));
-
-        user.setRoles(Collections.singleton(userRole));
-
-        User result = userRepository.save(user);
-
-        URI location = ServletUriComponentsBuilder
-                .fromCurrentContextPath().path("/api/users/{username}")
-                .buildAndExpand(result.getUsername()).toUri();
-
-        return ResponseEntity.created(location).body(new ApiResponse(true, "User registered successfully"));
-    }
 }

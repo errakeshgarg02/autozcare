@@ -17,7 +17,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import com.autozcare.main.security.JwtAuthenticationEntryPoint;
 import com.autozcare.main.security.JwtAuthenticationFilter;
-import com.autozcare.main.service.impl.CustomUserDetailsService;
+import com.autozcare.main.service.CustomUserDetailsService;
 
 @Configuration
 @EnableWebSecurity
@@ -27,8 +27,9 @@ import com.autozcare.main.service.impl.CustomUserDetailsService;
         prePostEnabled = true
 )
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
-    @Autowired
-    CustomUserDetailsService customUserDetailsService;
+    
+	@Autowired
+    private CustomUserDetailsService customUserDetailsService;
 
     @Autowired
     private JwtAuthenticationEntryPoint unauthorizedHandler;

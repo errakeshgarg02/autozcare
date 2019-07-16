@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.security.access.annotation.Secured;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,6 +18,7 @@ public class BookController {
 	
 	//https://www.mkyong.com/spring-boot/spring-rest-spring-security-example/
 	
+	//@Secured("ROLE_ADMIN")
 	@GetMapping(path = {"/books"}, produces = {"application/json"})
 	public List<Book> getAllBooks() {
 		log.debug("entered getAllBooks method");
